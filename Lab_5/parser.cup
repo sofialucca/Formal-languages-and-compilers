@@ -1,0 +1,232 @@
+import java_cup.runtime.*;
+import java.io.*;
+import java.util.HashMap;
+import java.lang.Math;
+init with {:
+    symbolScalarTable = new HashMap<String, Float>();
+    symbolVectorTable = new HashMap<String,Float[]>();
+:};
+
+parser code {:
+    public HashMap <String,Float>symbolScalarTable;
+    public HashMap <String,Float[]>symbolVectorTable;
+    /* To run the program type: java parser test.txt */
+    /*public static void main(String argv[]){
+	    try {
+        /* Scanner instantiation */
+        //scanner l = new scanner(new FileReader(argv[0]));
+        /* Parser instantiation */
+        //parser p = new parser(l);
+        /* Run the parser */
+   /*     Object result = p.parse().value;      
+      } catch (Exception e){
+              e.printStackTrace();
+      }
+    }*/
+    public int errors =0;
+
+    public void report_error(String message, Object info) {
+        System.err.print("ERROR: Syntax error");
+        if (info instanceof Symbol)
+            if (((Symbol)info).left != -1){
+                int line = (((Symbol)info).left)+1;
+                int column = (((Symbol)info).right)+1;
+                System.err.print(" (linea "+line+", colonna "+column+"): "+message);
+            } else System.err.print(": "+message);
+        else System.err.print(": "+message);
+    }
+
+    public void syntax_error(Symbol cur_token){}
+
+    // Return actual symbol
+    /* It returns the object of type Symbol in the top of the parser stack.
+    */
+    public Symbol getToken() {
+        return ((Symbol)stack.elementAt(tos));
+    }
+
+    public int getLine() {
+        if (((Symbol)stack.elementAt(tos)).left != -1){
+            return ((Symbol)stack.elementAt(tos)).left+1;
+        }else return -1;
+    }
+    // Return the column number of actual symbol
+    public int getColumn() {
+        if (((Symbol)stack.elementAt(tos)).left != -1){
+            return ((Symbol)stack.elementAt(tos)).right+1;
+        }else return -1;
+    }
+:};
+
+action code{:
+    private void pSynError(String message){
+        System.err.println("Syntax error: line: " + parser.getLine() + " column: " + parser.getColumn()+ "\n Error type: " + message);
+        parser.errors = 1;
+        parser.done_parsing();
+    }
+
+    private void pSynWarning(String message){
+        System.err.println("Syntax error: line: " + parser.getLine() + " column: " + parser.getColumn() + "\n Error type: " + message);
+        parser.errors = 1;        
+    }
+:};
+
+//terminal tokens
+terminal RO, RC, SC, SO, S, QM, C;
+terminal PLUS, MINUS, MUL, DIV, EQ, POW, SCALARPROD, uminus;
+terminal Float NUM;
+terminal String SCALARID;
+terminal String VECTORID;
+
+
+non terminal prog,assignment, expressionPrint, elementsList, inputLines;
+//non terminal Expr expr;
+non terminal Float[] vector,expr, elementFirst, elementSecond;
+
+//precedence
+precedence left EQ;
+precedence left PLUS, MINUS; 
+
+precedence left MUL, DIV;
+precedence left SCALARPROD;
+precedence right POW;
+precedence left RO,RC;
+precedence left uminus;
+
+//////////////////////////////////////
+// Grammar start
+//////////////////////////////////////
+
+start with prog;
+
+prog ::= elementsList QM ;
+
+assignment ::= SCALARID:id EQ expr:value S {:
+    if(value.length == 1){
+        parser.symbolScalarTable.put(id,value[0]);
+        System.out.println("assignment: " + value[0] );        
+    }else
+        pSynWarning("ERROR no vectors for a scalar assignment"); 
+:}
+    |VECTORID:id EQ expr:value S {:
+    if(value.length == 2){
+        parser.symbolVectorTable.put(id,value);
+        System.out.println("assignment: [" + value[0] + "," + value[1] + "]" );        
+    }else
+        pSynWarning("ERROR no scalars for a vector assignment");         
+:}
+;
+
+elementFirst ::= SO expr:a C {: 
+        if(a.length == 1){
+            RESULT = new Float[1];
+            RESULT[0]=new Float(a[0]);
+        }else{
+            pSynWarning("ERROR no vectors allowed for element vectors"); 
+        }
+    :};
+elementSecond ::= expr:a SC{: 
+        if(a.length == 1 ){
+            RESULT = new Float[1];
+            RESULT[0]=new Float(a[0]);
+        }else{
+            pSynWarning("ERROR no vectors allowed for element vectors"); 
+        }
+    :};
+vector ::= elementFirst:a elementSecond:b {: RESULT = new Float[2];
+    RESULT[0] = a[0];
+    RESULT[1] = b[0];:};
+expr ::= NUM:val {: RESULT = new Float[1];
+    RESULT[0]=val;:}
+    | vector:val {:RESULT = new Float[2];
+        RESULT = val;:}
+    |SCALARID :id{:RESULT = new Float[1];
+    RESULT[0]= parser.symbolScalarTable.get(id);:}
+    |VECTORID:id {:RESULT = new Float[2];
+    RESULT = parser.symbolVectorTable.get(id);:}
+    |expr:a POW expr:b{:
+        if(a.length == 1 && a.length == b.length){
+            RESULT = new Float[1];
+            RESULT[0] = new Float(Math.pow(a[0],b[0]));
+
+        }else
+            pSynWarning("ERROR power allowed only if scalar");
+    :}
+    | expr:a PLUS expr:b {:
+        if(a.length == b.length){
+            RESULT =  new Float[b.length];
+            if(a.length == 2){
+                RESULT[1] = a[1] + b[1];
+            }
+            RESULT[0] = a[0] + b[0];
+        }else
+            pSynWarning("ERROR sum allowed only if of same type");
+    :}
+    | expr:a MINUS expr:b {:
+        if(a.length == b.length){
+            RESULT =  new Float[b.length];
+            if(a.length == 2){
+                RESULT[1] = a[1] - b[1];
+            }
+            RESULT[0] = a[0] - b[0];
+        }else
+            pSynWarning("ERROR difference allowed only if of same type");
+    :}
+    | expr:a MUL expr:b {:
+        if(a.length == 1){
+            if(a.length != b.length){
+                RESULT = new Float[2];
+                RESULT[1] = a[0]*b[1];
+            }else{
+                RESULT = new Float[1];
+                
+            }
+            RESULT[0]= a[0] * b[0];
+        }else
+            pSynWarning("ERROR multiplication allowed only if both scalars or first scalar and then vector");
+    :}
+    |expr:a DIV expr:b {:
+        if(a.length == 1){
+            if(a.length != b.length){
+                //Float[] valExpr =  ;
+                RESULT = new Float[2];
+                RESULT[1] = a[0]/b[1];
+            }else{
+                RESULT = new Float[1];
+                
+            }
+            RESULT[0]= a[0] / b[0];
+        }else
+            pSynWarning("ERROR division allowed only if both scalars or first scalar and then vector");
+    :}
+    |expr:a SCALARPROD expr:b {:
+        if(a.length == b.length && a.length == 2){
+            RESULT = new Float[1];
+            RESULT[0] = (a[0] *b[0]) + (a[1] *b[1]);
+        }else
+            pSynWarning("ERROR scalar product only between two vectors " );
+    :}
+    | MINUS expr:val {:
+        if(val.length == 2){
+            
+            RESULT = new Float[2];
+            RESULT[1] = -val[1];
+        }else
+            RESULT = new Float[1];
+        RESULT[0]= -val[0];
+    :}%prec uminus 
+    | RO expr:val RC {:
+        RESULT = val;
+    :}
+;
+
+expressionPrint ::= expr:a S {:
+    if(a.length == 1)
+        System.out.println("scalar expression: " + a[0]);
+    else
+       System.out.println("vector expression: [" + a[0] + "," + a[1] + "]");
+    :}
+;
+
+inputLines ::= expressionPrint | assignment;
+elementsList ::=  | elementsList inputLines;

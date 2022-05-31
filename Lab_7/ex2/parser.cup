@@ -1,0 +1,150 @@
+import java_cup.runtime.*;
+import java.io.*;
+import java.util.HashMap;
+import java.lang.Math;
+import java.lang.*;
+
+init with{:
+    symbolTable = new HashMap<String,String>();
+:}
+
+
+parser code {:
+
+    public HashMap <String,String>symbolTable;
+    public boolean isCorrect = true;
+    public boolean declarations = true;
+
+    // Redefinition of error functions
+    /* The report_error function, in this program, is called only when
+       an error, not managed by the error symbol, is found.
+       Indeed, when errors are recognized by the error symbol, the function
+       syntax_error (disabled in this program) is called.
+       This program is an example of error function redefinition: two new
+       functions are developed, pSynError and pSynWarning, used to print
+       syntactical errors and warning, respectively. */
+    public void report_error(String message, Object info) {
+        System.err.print("ERROR: Syntax error");
+        if (info instanceof Symbol)
+            if (((Symbol)info).left != -1){
+                int line = (((Symbol)info).left)+1;
+                int column = (((Symbol)info).right)+1;
+                System.err.print(" (linea "+line+", colonna "+column+"): ");
+            } else System.err.print(": ");
+        else System.err.print(": ");
+    }
+    public void syntax_error(Symbol cur_token){}
+
+        // Return the line number of actual symbol
+    public int getLine() {
+        if (((Symbol)stack.elementAt(tos)).left != -1){
+            return ((Symbol)stack.elementAt(tos)).left+1;
+        }else return -1;
+    }
+    // Return the column number of actual symbol
+    public int getColumn() {
+        if (((Symbol)stack.elementAt(tos)).left != -1){
+            return ((Symbol)stack.elementAt(tos)).right+1;
+        }else return -1;
+    }
+
+    public Object stack ( int position){
+        // returns the object at the specified position
+        // from the top (tos) of the stack
+        return(((Symbol)stack.
+        elementAt(tos+position)).value);
+    }
+
+
+    :};
+
+
+action code {:
+
+    private void pSynError(String message){
+        System.err.println("SYN ERROR: line: "+parser.getLine()+" col: "+parser.getColumn()+": "+message);
+        parser.isCorrect = false;
+        parser.done_parsing();
+    }
+    private void pSynWarning(String message){
+        System.err.println("SYN WARNING: line: "+parser.getLine()+" col: "+parser.getColumn()+": "+message);
+        parser.isCorrect = false;
+    }
+        
+:}
+
+
+// Terminal tokens
+terminal Integer NUM;
+
+terminal String ID;
+terminal S, C, SO, SC;
+terminal STAR;
+terminal String INT_TYPE, DOUBLE_TYPE, CHAR_TYPE;
+
+
+
+// Non terminal tokens
+non terminal prog;
+non terminal Decl, declList;
+non terminal String V, Vlist;
+non terminal String T, Ptr, Array, NT0;
+
+
+
+
+
+//////////////////////////////////////
+// Grammar start
+//////////////////////////////////////
+
+start with prog;
+
+
+prog ::= declList{:
+    if(!parser.declarations)
+        System.out.println("No declarations"); 
+    else if(parser.isCorrect){
+        System.out.println("Correct declaration of variables"); 
+    }
+       
+:}
+
+;
+
+declList ::= 
+    | declList Decl S {:parser.declarations = true;:} 
+    | declList error S {:
+        pSynWarning("Warning in list of declarations");
+    :}; 
+
+Decl ::= T Vlist;
+
+T ::= INT_TYPE {:RESULT = "[INT]";:}
+    | DOUBLE_TYPE{:RESULT = "[DOUBLE]";:}
+    | CHAR_TYPE {:RESULT = "[CHAR]";:}
+;
+
+
+Vlist ::= V:v {:RESULT = v;:}
+    | Vlist C NT0:x V{: RESULT = x;:};
+
+NT0 ::= {:
+   RESULT = (String) parser.stack(-1); 
+:};
+
+V ::= Ptr ID:name Array:res{:
+        parser.symbolTable.put(name, (String) parser.stack(-3));
+        RESULT = (String) parser.stack(-3);
+        System.out.println("var " + name + " :" + res);
+:}; 
+
+Ptr ::= {:RESULT = (String) parser.stack(0);:} 
+    | Ptr:x STAR{:
+        RESULT = new String ("pointer(" + x + ")");
+    :} ; 
+
+Array ::= {:RESULT = (String) parser.stack(-1);:} 
+    | Array:x SO NUM:val SC{:
+        RESULT = new String ("array(" + val + "," + x + ")");
+    :};

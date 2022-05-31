@@ -1,0 +1,222 @@
+import java_cup.runtime.*;
+import java.io.*;
+
+parser code {:
+
+    public static int errors = 0;
+    /* To run the program type: java parser test.txt */
+    public static void main(String argv[]){
+	try {
+        /* Scanner instantiation */
+        scanner l = new scanner(new FileReader(argv[0]));
+        /* Parser instantiation */
+        parser p = new parser(l);
+        /* Run the parser */
+        Object result = p.parse().value;      
+      } catch (Exception e){
+              e.printStackTrace();
+      }
+    }
+
+    public void report_error(String message, Object info) {
+        System.err.print("ERROR: Syntax error");
+        if (info instanceof Symbol)
+            if (((Symbol)info).left != -1){
+                int line = (((Symbol)info).left)+1;
+                int column = (((Symbol)info).right)+1;
+                System.err.print(" (linea "+line+", colonna "+column+"): ");
+            } else System.err.print(": ");
+        else System.err.print(": ");
+    }
+
+    public void syntax_error(Symbol cur_token){}
+
+    // Return actual symbol
+    /* It returns the object of type Symbol in the top of the parser stack.
+    */
+        // Return the line number of actual symbol
+    public int getLine() {
+        if (((Symbol)stack.elementAt(tos)).left != -1){
+            return ((Symbol)stack.elementAt(tos)).left+1;
+        }else return -1;
+    }
+    // Return the column number of actual symbol
+    public int getColumn() {
+        if (((Symbol)stack.elementAt(tos)).left != -1){
+            return ((Symbol)stack.elementAt(tos)).right+1;
+        }else return -1;
+    }
+:};
+
+action code{:
+    private void pSynError(String message){
+        System.err.println("Syntax error: line: " + parser.getLine() + " column: " + parser.getColumn()+ "\n Error type: " + message);
+        parser.errors = 1;
+        parser.done_parsing();
+    }
+
+    private void pSynWarning(String message){
+        System.err.println("Syntax error: line: " + parser.getLine() + " column: " + parser.getColumn() + "\n Error type: " + message);
+        parser.errors = 1;        
+    }
+:}
+
+
+
+// Terminal tokens
+terminal INT, DOUBLE, ID;
+terminal PRINT, IF, WHILE, ELSE;
+terminal RO, RC, BO, BC, SC, CM, SO, S;
+terminal PLUS, MINUS, STAR, DIV;
+terminal MIN, MAJ, MIN_EQ, EQ_MIN, MAJ_EQ, EQ_MAJ, EQ;
+terminal AND, OR, NOT;
+terminal INT_TYPE, DOUBLE_TYPE;
+terminal UMINUS;
+
+// Non terminal tokens
+non terminal prog, stmt_list, stmt, if, while, assignment, print;
+non terminal exp;
+non terminal mineq, mageq;
+
+non terminal decl_list, decl, var_list, var;
+non terminal type, array;
+non terminal if_condition, while_condition;
+non terminal id;
+
+// Precedences and associativities
+// lower precedences
+precedence left OR;
+precedence left AND;
+precedence left NOT;
+precedence left MIN, MAJ, MIN_EQ, EQ_MIN, MAJ_EQ, EQ_MAJ, EQ;
+precedence left PLUS, MINUS;
+precedence left STAR, DIV;
+precedence left UMINUS;
+// higher precedences
+
+
+//////////////////////////////////////
+// Grammar start
+//////////////////////////////////////
+
+start with prog;
+
+
+prog ::= decl_list stmt_list{:     
+    if(parser.errors == 1){
+        return null;
+    }else
+        System.out.println("Correct grammar\n");:};
+        
+
+
+
+//////////////////////////////////////
+// Declarations
+//////////////////////////////////////
+
+decl_list ::= decl_list decl | 
+;
+
+decl ::= type var_list S  
+        | type error S{: pSynWarning("Declaration error");:};
+
+type ::= INT_TYPE | DOUBLE_TYPE
+;
+
+var_list ::= var | var_list CM var
+;
+
+var ::= ID array
+;
+
+array ::= | array SO INT SC
+;
+
+
+//////////////////////////////////////
+// Instructions
+//////////////////////////////////////
+
+stmt_list ::= stmt_list stmt | stmt 
+    | error stmt {:pSynWarning("Error in statment");:}
+;
+
+
+stmt ::= if | while | assignment | print | BO stmt_list BC
+     | BO stmt_list error BC {: pSynWarning("Error in statement, missing ; before }");:}
+     | error S {:pSynWarning("Error in stament");:}
+    | BO error  BC{:pSynWarning("Error in statement, missing ; before }\n");:}  
+;          
+
+// Assignment instruction
+assignment ::= id S | id EQ exp S 
+        | id EQ error S {:pSynWarning("Error in assignment, type 1");:}
+        | error EQ exp S {:pSynWarning("Error in assigment, type 2");:}
+;
+
+// PRINT instruction
+print ::= PRINT id S 
+    | PRINT error S{:pSynWarning("Error in print instrcution, missing '{'");:}
+;
+
+
+// IF instruction
+if ::= IF if_condition stmt ELSE stmt
+     | IF if_condition stmt error stmt {:pSynWarning("Error in if declaration, missing else\n");:};
+
+if_condition ::= RO exp RC
+    | error exp RC{:pSynWarning("if error, missing '('\n");:}
+    | RO error RC{:pSynWarning("Condition if error\n");:}
+    | RO exp error {:pSynWarning("if error, missing ')'\n");:};
+
+
+// WHILE instruction
+while ::= WHILE while_condition stmt; 
+    
+
+while_condition ::= RO exp RC
+    | error exp RC{:pSynWarning("While error, missing '('\n");:}
+    | RO error RC{:pSynWarning("Condition While error\n");:}
+    | RO exp error {:pSynWarning("While error, missing ')'\n");:};
+
+// Expressions
+exp ::= 
+    /* Espressioni logiche */
+    exp AND exp
+    | exp OR exp
+    | NOT exp
+
+    /* Espressioni di confronto */
+    | exp EQ EQ exp
+    | exp MIN exp
+    | exp MAJ exp
+    | exp mineq exp
+    | exp mageq exp
+
+    /* Espressioni aritmetiche */
+    | exp PLUS exp
+    | exp MINUS exp
+    | exp STAR exp
+    | exp DIV exp
+    | RO exp RC
+    | RO error RC{:pSynWarning("Expressione error");:}
+    | id
+    | INT
+    | DOUBLE
+    | MINUS INT %prec UMINUS
+    | MINUS DOUBLE %prec UMINUS
+;
+
+
+mineq ::= MIN_EQ | EQ_MIN;
+mageq ::= MAJ_EQ | EQ_MAJ;
+
+
+id ::= ID
+      |ID SO INT SC
+      |ID SO ID SC
+        | ID SO error SC{:pSynWarning("Vector error, missing '['");:}
+        | error SC {:pSynWarning("Error in vector");:}
+       
+;

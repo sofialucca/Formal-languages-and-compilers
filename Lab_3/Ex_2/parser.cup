@@ -1,0 +1,51 @@
+import java_cup.runtime.*;
+
+
+parser code {:
+
+    public void report_error(String message, Object info) {
+        System.err.print("ERROR: Syntax error");
+        if (info instanceof Symbol)
+            if (((Symbol)info).left != -1){
+                int line = (((Symbol)info).left)+1;
+                int column = (((Symbol)info).right)+1;
+                System.err.print(" (linea "+line+", colonna "+column+"): ");
+            } else System.err.print(": ");
+        else System.err.print(": ");
+    }
+:};
+
+
+
+// Terminal tokens
+terminal SEP,SC,COL,C,ARR;
+terminal DATE,STRING,ISBN,QM,NUM,GEN,LITT, LETT;
+
+
+
+// Non terminal tokens
+non terminal lang;
+non terminal collocation, book, booksList, listElement, writersList, firstPart;
+non terminal loan,loansList,userElement,secondPart, title,user,writer;
+
+
+//////////////////////////////////////
+// Grammar start
+//////////////////////////////////////
+
+start with lang;
+
+lang ::= firstPart secondPart
+    {:System.out.println("Correct grammar");:};
+
+collocation ::= LITT GEN NUM LETT | LITT GEN NUM;
+book ::= ISBN  COL STRING COL NUM | ISBN  COL STRING COL NUM COL collocation;
+booksList ::= book | booksList C book;
+writer ::=  STRING ARR;
+listElement ::= writer booksList SC;
+writersList ::= listElement | writersList listElement;
+firstPart ::= writersList SEP;
+loan ::= DATE ISBN;
+loansList ::= loan | loansList C loan;
+userElement ::= STRING COL loansList SC;
+secondPart ::= userElement | secondPart userElement;
